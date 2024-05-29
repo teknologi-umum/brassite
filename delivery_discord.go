@@ -78,8 +78,11 @@ func DeliverToDiscord(ctx context.Context, webhookURL string, feedItem FeedItem,
 		return fmt.Errorf("failed to convert HTML to markdown: %w", err)
 	}
 
-	var sb strings.Builder
+	if len(content) > 0 {
+		content += "\n\n"
+	}
 
+	var sb strings.Builder
 	err = discordTemplate.Execute(&sb, discordTemplateData{
 		Title:   feedItem.ItemTitle,
 		Content: content,
@@ -87,10 +90,6 @@ func DeliverToDiscord(ctx context.Context, webhookURL string, feedItem FeedItem,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to execute discord template: %w", err)
-	}
-
-	if sb.Len() > 0 {
-		sb.WriteString("\n\n")
 	}
 
 	webhookObject := discordWebhookObject{
