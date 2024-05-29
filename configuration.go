@@ -122,7 +122,7 @@ func (d *DiscordWebhookUrl) UnmarshalTOML(data any) error {
 		return nil
 	}
 
-	return fmt.Errorf("provided %T, expected string or []string", data)
+	return fmt.Errorf("the value %v is not a string or []string", data)
 }
 
 func ParseConfiguration(configPath string) (Configuration, error) {
