@@ -1,0 +1,41 @@
+name: PR
+
+on:
+  pull_request:
+
+jobs:
+  scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Setup jq
+        uses: dcarbone/install-jq-action@v2.1.0
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@main
+        with:
+          extra_args: --debug --only-verified
+
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container: golang:1.21
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: go build -buildvcs=false .
+
+      - name: Run test & coverage
+        run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - uses: codecov/codecov-action@v3
+        continue-on-error: true
