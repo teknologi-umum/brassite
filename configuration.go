@@ -58,11 +58,35 @@ type BasicAuth struct {
 
 type Delivery struct {
 	// Discord webhook URL
-	DiscordWebhookUrl string `json:"discord_webhook_url" yaml:"discord_webhook_url" toml:"discord_webhook_url"`
+	DiscordWebhookUrl DiscordWebhookUrl `json:"discord_webhook_url" yaml:"discord_webhook_url" toml:"discord_webhook_url"`
 	// Telegram bot token
 	TelegramBotToken string `json:"telegram_bot_token" yaml:"telegram_bot_token" toml:"telegram_bot_token"`
 	// Telegram chat ID
 	TelegramChatId string `json:"telegram_chat_id" yaml:"telegram_chat_id" toml:"telegram_chat_id"`
+}
+
+type DiscordWebhookUrl struct {
+	Values []string
+}
+
+// References: https://github.com/go-yaml/yaml/issues/100
+//
+// Custom unmarshaller to support reading a field as string or array of strings
+func (d *DiscordWebhookUrl) UnmarshalYAML(unmarshal func(any) error) error {
+	var multi []string
+	err := unmarshal(&multi)
+	if err != nil {
+		var single string
+		err := unmarshal(&single)
+		if err != nil {
+			return err
+		}
+		d.Values = make([]string, 1)
+		d.Values[0] = single
+	} else {
+		d.Values = multi
+	}
+	return nil
 }
 
 func ParseConfiguration(configPath string) (Configuration, error) {
@@ -130,7 +154,7 @@ func (c Configuration) Validate() (ok bool, issues *ValidationError) {
 				ok = false
 			}
 		}
-		if feed.Delivery.DiscordWebhookUrl == "" && feed.Delivery.TelegramBotToken == "" {
+		if len(feed.Delivery.DiscordWebhookUrl.Values) == 0 && feed.Delivery.TelegramBotToken == "" {
 			issues.AddIssue(fmt.Sprintf("feeds.%d.delivery", i), "at least one delivery method is required (otherwise what's the point?)")
 			ok = false
 		}
