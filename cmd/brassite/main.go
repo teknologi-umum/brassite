@@ -107,7 +107,7 @@ func runWorker(feed brassite.Feed) {
 	for {
 		slog.Debug("Starting worker", slog.String("feed_name", feed.Name), slog.String("url", feed.URL), slog.Duration("interval", feed.Interval))
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 
 		// Call the feed parser
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, feed.URL, nil)
@@ -118,6 +118,9 @@ func runWorker(feed brassite.Feed) {
 			time.Sleep(feed.Interval)
 			continue
 		}
+
+		request.Header.Add("Accept", "*/*")
+		request.Header.Add("User-Agent", "Brassite/1.0")
 
 		for key, value := range feed.Headers {
 			request.Header.Add(key, value)
