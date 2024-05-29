@@ -1,8 +1,0 @@
-feeds:
-  - name: "Hackernews"
-    url: "https://news.ycombinator.com/rss"
-    logo: "https://cdn.iconscout.com/icon/free/png-256/hacker-news-2-569388.png"
-    interval: 12h
-    without_content: true
-    delivery:
-      discord_webhook_url: "https://discord.com/api/webhooks/1245302440685998110/0s-zHoCm127jqKmzV5WfK6ety6kHF0VZ91RlrMm2olhwsuJafPcU1EI-ceosCnWUOY6r"
