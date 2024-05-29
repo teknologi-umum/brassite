@@ -28,7 +28,18 @@ feeds:
 Then run the Docker container.
 
 ```sh
-docker run -v ./config.yml:/config.yml ghcr.io/teknologi-umum/brassite:edge -config-path /config.yml
+docker run -v ./config.yml:/config.yml ghcr.io/teknologi-umum/brassite:edge /usr/local/bin/brassite --config=/config.yml
+```
+
+Or if you prefer Docker Compose:
+```yaml
+services:
+  brassite:
+    image: ghcr.io/teknologi-umum/brassite:edge
+    command: "/usr/local/bin/brassite --config=/config.yml"
+    volumes:
+      - ./config.yml:/config.yml
+    restart: on-failure:10
 ```
 
 ## License
