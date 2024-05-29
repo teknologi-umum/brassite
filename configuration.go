@@ -106,6 +106,25 @@ func (d *DiscordWebhookUrl) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (d *DiscordWebhookUrl) UnmarshalTOML(data any) error {
+	multi, ok := data.([]any)
+	if ok {
+		var multiStrs []string
+		for _, item := range multi {
+			str, _ := item.(string)
+			multiStrs = append(multiStrs, str)
+		}
+		d.Values = multiStrs
+		return nil
+	} else if single, ok := data.(string); ok {
+		d.Values = make([]string, 1)
+		d.Values[0] = single
+		return nil
+	}
+
+	return fmt.Errorf("provided %T, expected string or []string", data)
+}
+
 func ParseConfiguration(configPath string) (Configuration, error) {
 	if configPath == "" {
 		return Configuration{}, fmt.Errorf("config path is empty")
