@@ -89,6 +89,23 @@ func (d *DiscordWebhookUrl) UnmarshalYAML(unmarshal func(any) error) error {
 	return nil
 }
 
+func (d *DiscordWebhookUrl) UnmarshalJSON(data []byte) error {
+	var multi []string
+	err := json5.Unmarshal(data, &multi)
+	if err != nil {
+		var single string
+		err := json5.Unmarshal(data, &single)
+		if err != nil {
+			return err
+		}
+		d.Values = make([]string, 1)
+		d.Values[0] = single
+	} else {
+		d.Values = multi
+	}
+	return nil
+}
+
 func ParseConfiguration(configPath string) (Configuration, error) {
 	if configPath == "" {
 		return Configuration{}, fmt.Errorf("config path is empty")
