@@ -101,6 +101,7 @@ func main() {
 	}
 
 	<-exitSignal
+	slog.Info("Shutting down Brassite")
 }
 
 func runWorker(feed brassite.Feed) {
@@ -108,13 +109,22 @@ func runWorker(feed brassite.Feed) {
 		slog.Debug("Starting worker", slog.String("feed_name", feed.Name), slog.String("url", feed.URL), slog.Duration("interval", feed.Interval))
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+		hub := sentry.CurrentHub().Clone()
+		hub.Scope().SetTag("feed_name", feed.Name)
+		hub.Scope().SetExtras(map[string]interface{}{
+			"feed_name":       feed.Name,
+			"url":             feed.URL,
+			"interval":        feed.Interval.String(),
+			"without_content": feed.WithoutContent,
+		})
+		ctx = sentry.SetHubOnContext(ctx, hub)
 
 		// Call the feed parser
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, feed.URL, nil)
 		if err != nil {
 			slog.Error("Failed to create request", slog.Any("error", err), slog.String("feed_name", feed.Name))
 			cancel()
-			sentry.CaptureException(err)
+			sentry.GetHubFromContext(ctx).CaptureException(err)
 			time.Sleep(feed.Interval)
 			continue
 		}
@@ -134,7 +144,7 @@ func runWorker(feed brassite.Feed) {
 		if err != nil {
 			slog.Error("Failed to send request", slog.Any("error", err), slog.String("feed_name", feed.Name))
 			cancel()
-			sentry.CaptureException(err)
+			sentry.GetHubFromContext(ctx).CaptureException(err)
 			time.Sleep(feed.Interval)
 			continue
 		}
@@ -145,10 +155,13 @@ func runWorker(feed brassite.Feed) {
 			slog.Error("Failed to parse feed", slog.Any("error", err), slog.String("feed_name", feed.Name))
 			_ = response.Body.Close()
 			cancel()
-			sentry.CaptureException(err)
+			sentry.GetHubFromContext(ctx).CaptureException(err)
 			time.Sleep(feed.Interval)
 			continue
 		}
+
+		// Don't take too long to close the body
+		_ = response.Body.Close()
 
 		// Only select the new items by using now - interval
 		var newItems []*gofeed.Item
@@ -202,7 +215,7 @@ func runWorker(feed brassite.Feed) {
 					if err != nil {
 						slog.Error("Failed to deliver to Discord", slog.String("feed_name", feed.Name), slog.Any("error", err))
 
-						sentry.CaptureException(err)
+						sentry.GetHubFromContext(ctx).CaptureException(err)
 					}
 				}
 			}
@@ -218,7 +231,6 @@ func runWorker(feed brassite.Feed) {
 			// }
 		}
 
-		_ = response.Body.Close()
 		cancel()
 
 		time.Sleep(feed.Interval)
