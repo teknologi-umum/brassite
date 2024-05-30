@@ -109,6 +109,7 @@ func DeliverToDiscord(ctx context.Context, webhookURL string, feedItem FeedItem,
 	}
 
 	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("User-Agent", "Brassite/1.0")
 
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
