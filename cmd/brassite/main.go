@@ -209,12 +209,14 @@ func runWorker(feed brassite.Feed) {
 			}
 
 			// Deliver to Discord
-			if feed.Delivery.DiscordWebhookUrl != "" {
-				err := brassite.DeliverToDiscord(ctx, feed.Delivery.DiscordWebhookUrl, feedItem, feed.Logo)
-				if err != nil {
-					slog.Error("Failed to deliver to Discord", slog.String("feed_name", feed.Name), slog.Any("error", err))
+			if len(feed.Delivery.DiscordWebhookUrl.Values) > 0 {
+				for _, url := range feed.Delivery.DiscordWebhookUrl.Values {
+					err := brassite.DeliverToDiscord(ctx, url, feedItem, feed.Logo)
+					if err != nil {
+						slog.Error("Failed to deliver to Discord", slog.String("feed_name", feed.Name), slog.Any("error", err))
 
-					sentry.GetHubFromContext(ctx).CaptureException(err)
+						sentry.GetHubFromContext(ctx).CaptureException(err)
+					}
 				}
 			}
 
