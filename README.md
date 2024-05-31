@@ -42,6 +42,30 @@ services:
     restart: on-failure:10
 ```
 
+## Supported Delivery Options
+
+### Discord
+
+```yaml
+feeds:
+  - name: Tech Crunch
+    # other configuration options...
+    delivery:
+      discord_webhook_url: "https://discord.com/api/webhooks/..../...."
+```
+
+You can also provide multiple webhook urls for the same feed if you want to send it to multiple channels.
+
+```yaml
+feeds:
+  - name: Tech Crunch
+    # other configuration options...
+    delivery:
+      discord_webhook_url: 
+        - "https://discord.com/api/webhooks/..../...."
+        - "https://discord.com/api/webhooks/..../...."
+```
+
 ## License
 
 ```
