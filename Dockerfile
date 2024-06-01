@@ -4,7 +4,7 @@ WORKDIR /build
 
 COPY . .
 
-RUN go build -o brassite ./cmd/brassite/main.go
+RUN go build -o brassite -ldflags="-X main.version=$(git rev-parse HEAD)" ./cmd/brassite/
 
 FROM alpine:3.20 AS runtime
 

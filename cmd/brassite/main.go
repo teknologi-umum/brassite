@@ -26,8 +26,12 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/mmcdole/gofeed"
+	slogmulti "github.com/samber/slog-multi"
 	"github.com/teknologi-umum/brassite"
 )
+
+var version string
+var environment = os.Getenv("ENVIRONMENT")
 
 func main() {
 	// This is a very simple program, you can extend this to any extend you'd like.
@@ -57,9 +61,15 @@ func main() {
 		slogLevel = slog.LevelError
 	}
 	if logPretty {
-		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slogLevel})))
+		slog.SetDefault(slog.New(slogmulti.Fanout(
+			slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slogLevel}),
+			NewSlogSentryBreadcrumbsHandler(),
+		)))
 	} else {
-		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slogLevel})))
+		slog.SetDefault(slog.New(slogmulti.Fanout(
+			slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slogLevel}),
+			NewSlogSentryBreadcrumbsHandler(),
+		)))
 	}
 
 	if err := sentry.Init(sentry.ClientOptions{
@@ -67,6 +77,8 @@ func main() {
 		SampleRate:       1.0,
 		EnableTracing:    true,
 		TracesSampleRate: 0.2,
+		Environment:      environment,
+		Release:          version,
 	}); err != nil {
 		slog.Error("Failed to initialize Sentry", slog.Any("error", err))
 		os.Exit(70)
@@ -106,8 +118,6 @@ func main() {
 
 func runWorker(feed brassite.Feed) {
 	for {
-		slog.Debug("Starting worker", slog.String("feed_name", feed.Name), slog.String("url", feed.URL), slog.Duration("interval", feed.Interval))
-
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 		hub := sentry.CurrentHub().Clone()
 		hub.Scope().SetTag("feed_name", feed.Name)
@@ -119,10 +129,12 @@ func runWorker(feed brassite.Feed) {
 		})
 		ctx = sentry.SetHubOnContext(ctx, hub)
 
+		slog.DebugContext(ctx, "Starting worker", slog.String("feed_name", feed.Name), slog.String("url", feed.URL), slog.Duration("interval", feed.Interval))
+
 		// Call the feed parser
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, feed.URL, nil)
 		if err != nil {
-			slog.Error("Failed to create request", slog.Any("error", err), slog.String("feed_name", feed.Name))
+			slog.ErrorContext(ctx, "Failed to create request", slog.Any("error", err), slog.String("feed_name", feed.Name))
 			cancel()
 			sentry.GetHubFromContext(ctx).CaptureException(err)
 			time.Sleep(feed.Interval)
@@ -142,17 +154,19 @@ func runWorker(feed brassite.Feed) {
 
 		response, err := http.DefaultClient.Do(request)
 		if err != nil {
-			slog.Error("Failed to send request", slog.Any("error", err), slog.String("feed_name", feed.Name))
+			slog.ErrorContext(ctx, "Failed to send request", slog.Any("error", err), slog.String("feed_name", feed.Name))
 			cancel()
 			sentry.GetHubFromContext(ctx).CaptureException(err)
 			time.Sleep(feed.Interval)
 			continue
 		}
 
+		slog.DebugContext(ctx, "Received response", slog.String("feed_name", feed.Name), slog.Int("status_code", response.StatusCode), slog.String("content_type", response.Header.Get("Content-Type")))
+
 		parser := gofeed.NewParser()
 		remoteFeed, err := parser.Parse(response.Body)
 		if err != nil {
-			slog.Error("Failed to parse feed", slog.Any("error", err), slog.String("feed_name", feed.Name))
+			slog.ErrorContext(ctx, "Failed to parse feed", slog.Any("error", err), slog.String("feed_name", feed.Name))
 			_ = response.Body.Close()
 			cancel()
 			sentry.GetHubFromContext(ctx).CaptureException(err)
@@ -166,10 +180,10 @@ func runWorker(feed brassite.Feed) {
 		// Only select the new items by using now - interval
 		var newItems []*gofeed.Item
 		for _, item := range remoteFeed.Items {
-			slog.Debug("Parsing item", slog.String("feed_name", feed.Name), slog.String("item_title", item.Title), slog.String("item_link", item.Link))
+			slog.DebugContext(ctx, "Parsing item", slog.String("feed_name", feed.Name), slog.String("item_title", item.Title), slog.String("item_link", item.Link))
 
 			if item.PublishedParsed != nil {
-				slog.Debug("Published parsed value", slog.String("feed_name", feed.Name), slog.Time("published_parsed", *item.PublishedParsed), slog.Time("now", time.Now().UTC()))
+				slog.DebugContext(ctx, "Published parsed value", slog.String("feed_name", feed.Name), slog.Time("published_parsed", *item.PublishedParsed), slog.Time("now", time.Now().UTC()))
 				if item.PublishedParsed.After(time.Now().UTC().Add(-feed.Interval)) {
 					newItems = append(newItems, item)
 					continue
@@ -177,7 +191,7 @@ func runWorker(feed brassite.Feed) {
 			}
 
 			if item.UpdatedParsed != nil {
-				slog.Debug("Updated parsed value", slog.String("feed_name", feed.Name), slog.Time("updated_parsed", *item.UpdatedParsed), slog.Time("now", time.Now().UTC()))
+				slog.DebugContext(ctx, "Updated parsed value", slog.String("feed_name", feed.Name), slog.Time("updated_parsed", *item.UpdatedParsed), slog.Time("now", time.Now().UTC()))
 				if item.UpdatedParsed.After(time.Now().UTC().Add(-feed.Interval)) {
 					newItems = append(newItems, item)
 					continue
@@ -185,7 +199,7 @@ func runWorker(feed brassite.Feed) {
 			}
 		}
 
-		slog.Debug("Found new items", slog.String("feed_name", feed.Name), slog.Int("new_items", len(newItems)))
+		slog.DebugContext(ctx, "Found new items", slog.String("feed_name", feed.Name), slog.Int("new_items", len(newItems)))
 
 		// Deliver it
 		for _, item := range newItems {
@@ -213,7 +227,7 @@ func runWorker(feed brassite.Feed) {
 				for _, url := range feed.Delivery.DiscordWebhookUrl.Values {
 					err := brassite.DeliverToDiscord(ctx, url, feedItem, feed.Logo)
 					if err != nil {
-						slog.Error("Failed to deliver to Discord", slog.String("feed_name", feed.Name), slog.Any("error", err))
+						slog.ErrorContext(ctx, "Failed to deliver to Discord", slog.String("feed_name", feed.Name), slog.Any("error", err))
 
 						sentry.GetHubFromContext(ctx).CaptureException(err)
 					}
