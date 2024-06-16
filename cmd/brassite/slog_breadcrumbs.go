@@ -33,6 +33,43 @@ func (s *slogSentryBreadcrumbs) Enabled(context.Context, slog.Level) bool {
 	return true
 }
 
+func (s *slogSentryBreadcrumbs) parseAttributeValue(a slog.Attr) (key string, value any) {
+	key = a.Key
+
+	switch a.Value.Kind() {
+	case slog.KindAny:
+		value = a.Value.Any()
+	case slog.KindBool:
+		value = a.Value.Bool()
+	case slog.KindDuration:
+		value = a.Value.Duration().String()
+	case slog.KindFloat64:
+		value = a.Value.Float64()
+	case slog.KindInt64:
+		value = a.Value.Int64()
+	case slog.KindString:
+		value = a.Value.String()
+	case slog.KindTime:
+		value = a.Value.Time().String()
+	case slog.KindUint64:
+		value = a.Value.Uint64()
+	case slog.KindGroup:
+		m := make(map[string]any)
+		group := a.Value.Group()
+		for _, b := range group {
+			k, v := s.parseAttributeValue(b)
+			m[k] = v
+		}
+
+		value = m
+	case slog.KindLogValuer:
+		valuer := a.Value.LogValuer()
+		b := slog.Any(a.Key, valuer)
+		_, value = s.parseAttributeValue(b)
+	}
+	return
+}
+
 // Handle implements slog.Handler.
 func (s *slogSentryBreadcrumbs) Handle(ctx context.Context, r slog.Record) error {
 	if ctx == nil {
@@ -51,7 +88,8 @@ func (s *slogSentryBreadcrumbs) Handle(ctx context.Context, r slog.Record) error
 
 	var data = make(map[string]any)
 	r.Attrs(func(a slog.Attr) bool {
-		data[a.Key] = a.Value
+		key, value := s.parseAttributeValue(a)
+		data[key] = value
 		return true
 	})
 
