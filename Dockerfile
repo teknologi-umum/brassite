@@ -1,4 +1,4 @@
-FROM golang:1.22-alpine3.20 AS builder
+FROM golang:1.27.1-alpine3.24 AS builder
 
 WORKDIR /build
 
@@ -6,7 +6,7 @@ COPY . .
 
 RUN go build -o brassite -ldflags="-X main.version=$(git rev-parse HEAD)" ./cmd/brassite/
 
-FROM alpine:3.20 AS runtime
+FROM alpine:3.24 AS runtime
 
 WORKDIR /usr/local/src/brassite
 

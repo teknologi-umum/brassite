@@ -25,13 +25,17 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	sentryhttpclient "github.com/getsentry/sentry-go/httpclient"
+	sentryslog "github.com/getsentry/sentry-go/slog"
 	"github.com/mmcdole/gofeed"
-	slogmulti "github.com/samber/slog-multi"
 	"github.com/teknologi-umum/brassite"
 )
 
 var version string
 var environment = os.Getenv("ENVIRONMENT")
+var httpClient = &http.Client{
+	Transport: sentryhttpclient.NewSentryRoundTripper(nil, nil),
+}
 
 func main() {
 	// This is a very simple program, you can extend this to any extend you'd like.
@@ -61,14 +65,14 @@ func main() {
 		slogLevel = slog.LevelError
 	}
 	if logPretty {
-		slog.SetDefault(slog.New(slogmulti.Fanout(
+		slog.SetDefault(slog.New(slog.NewMultiHandler(
 			slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slogLevel}),
-			NewSlogSentryBreadcrumbsHandler(),
+			sentryslog.Option{LogLevel: []slog.Level{slog.LevelWarn, slog.LevelError, sentryslog.LevelFatal}}.NewSentryHandler(context.Background()),
 		)))
 	} else {
-		slog.SetDefault(slog.New(slogmulti.Fanout(
+		slog.SetDefault(slog.New(slog.NewMultiHandler(
 			slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slogLevel}),
-			NewSlogSentryBreadcrumbsHandler(),
+			sentryslog.Option{LogLevel: []slog.Level{slog.LevelWarn, slog.LevelError, sentryslog.LevelFatal}}.NewSentryHandler(context.Background()),
 		)))
 	}
 
@@ -121,7 +125,7 @@ func runWorker(feed brassite.Feed) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 		hub := sentry.CurrentHub().Clone()
 		hub.Scope().SetTag("feed_name", feed.Name)
-		hub.Scope().SetExtras(map[string]interface{}{
+		hub.Scope().SetContext("Brassite", sentry.Context{
 			"feed_name":       feed.Name,
 			"url":             feed.URL,
 			"interval":        feed.Interval.String(),
@@ -152,7 +156,7 @@ func runWorker(feed brassite.Feed) {
 			request.SetBasicAuth(feed.BasicAuth.Username, feed.BasicAuth.Password)
 		}
 
-		response, err := http.DefaultClient.Do(request)
+		response, err := httpClient.Do(request)
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to send request", slog.Any("error", err), slog.String("feed_name", feed.Name))
 			cancel()
